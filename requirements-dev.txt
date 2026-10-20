@@ -1,0 +1,9 @@
+# 开发/测试专用依赖（部署时不需要）
+-r requirements.txt
+# 测试使用模拟适配器和语音模型，不安装微信客户端桥接或下载 Whisper 模型。
+numpy
+Pillow
+pypdf
+python-docx
+openpyxl
+pytest

@@ -1,0 +1,32 @@
+# 复制为 config.yaml，填写 Key、小号昵称和目标群。已有配置无需覆盖。
+deepseek:
+  api_key: ""                   # 推荐设置环境变量 DEEPSEEK_API_KEY
+  model: "deepseek-chat"
+wechat:
+  adapter: "wechatauto"
+  self_name: "机器人小号昵称"
+  groups:
+    - name: "你的群名"
+      trigger: "all"
+persona:
+  bot_name: "DeepSeek"
+chat:
+  max_debounce_seconds: 10
+  time_aware: true
+# 需要时再开启；语音和文件解析需安装 requirements-media.txt。
+vision:
+  enabled: false
+asr:
+  enabled: false
+files:
+  enabled: false
+search:
+  enabled: false
+imagegen:
+  enabled: false
+memory:
+  enabled: false
+stickers:
+  enabled: false
+proactive:
+  enabled: false

@@ -1,0 +1,3 @@
+-r requirements.txt
+wechatauto-replica
+Pillow

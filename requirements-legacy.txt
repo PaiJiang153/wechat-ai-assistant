@@ -1,0 +1,4 @@
+# 仅在维护历史适配器时安装。
+-r requirements.txt
+wcferry
+pywechat127

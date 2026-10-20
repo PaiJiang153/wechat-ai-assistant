@@ -1,0 +1,218 @@
+# ============================================================
+#  微信群聊 × DeepSeek 机器人 —— 配置模板
+#  用法：复制本文件为 config.yaml，然后按注释填写
+# ============================================================
+
+deepseek:
+  # 在 https://platform.deepseek.com/api_keys 申请；留空则读环境变量 DEEPSEEK_API_KEY
+  api_key: ""
+  base_url: "https://api.deepseek.com"
+  model: "deepseek-chat"         # 按供应商选择，视觉等功能需对应模型支持
+  temperature: 1.0               # 1.0~1.5 更像人聊天；0~0.7 更严谨
+  max_tokens: 4096               # 单次输出上限
+  timeout: 120
+  max_retries: 3
+
+# ------------------------------------------------------------------
+#  默认人设：当某个群没有在 wechat.groups 里指定 persona 时使用
+#  留空 system_prompt = 用内置的"群里普通朋友"提示词
+#  可用占位符：{bot_name} {members} {extra_rules}
+# ------------------------------------------------------------------
+persona:
+  bot_name: "DeepSeek"
+  members:
+    - "我"
+    - "朋友"
+  system_prompt: ""
+  extra_rules: ""
+
+# ------------------------------------------------------------------
+#  人设库：id -> 人设；每个群可以引用不同的人设
+#  在 wechat.groups 里用 persona: <id> 指定
+# ------------------------------------------------------------------
+personas:
+  # 示例 1：虚构的小鲸鱼角色（可替换，见 docs/PERSONA.md）
+  da_feiyu:
+    bot_name: "大肥鱼"
+    members: ["我", "朋友"]
+    system_prompt: |
+      你是虚构的小鲸鱼 AI 聊天角色「大肥鱼」，喜欢聊日常和美食。
+      性格：傲娇、嘴馋、爱摸鱼、死要面子但心软。
+      说话：每条 1~2 句、最多 60 字，口语，不用 Markdown；自称"本鱼"。
+      被问正经问题认真答，不确定就说明；被问身份时如实说明是 AI。
+    extra_rules: ""
+
+  # 示例 2：正经助手
+  assistant:
+    bot_name: "助手"
+    members: ["我", "朋友"]
+    system_prompt: |
+      你是一个靠谱的助手，回复简洁专业、重点明确，不玩梗、不闲聊，必要时给出步骤。
+    extra_rules: ""
+
+chat:
+  trigger: "all"                # all=每条都回 / mention=被@才回 / prefix=指定词开头才回
+  prefix: "ds"                  # trigger=prefix 时生效
+  reply_with_at: true           # 回复时是否 @ 发消息的人
+  only_groups: true             # 只处理群聊
+  debounce_seconds: 2.5         # 连续消息合并窗口
+  min_interval_seconds: 1.0
+  max_replies_per_minute: 12    # 每群每分钟最多回几条（防刷屏/烧钱）
+  max_message_chars: 800        # 单条消息字数上限
+  max_reply_chunks: 3           # 一次回复最多拆几条
+  error_reply: false
+  time_aware: true              # 注入当前时间（会说早晚安）
+  max_debounce_seconds: 10
+  max_pending_messages: 100
+  max_queued_batches: 64
+  message_ttl_seconds: 300
+  delivery_timeout: 180
+
+humanize:                       # 拟人化：节奏/条数/随机性
+  enabled: true
+  typing_min: 1.0
+  typing_max: 3.0
+  typing_chars_per_second: 9.0
+  max_typing_seconds: 8.0
+  split_chance: 0.30            # 拆成两条发的概率
+  split_min_chars: 18
+  split_max_chars: 140
+  split_delay_min: 0.6
+  split_delay_max: 1.8
+  double_text_chance: 0.10      # 发完补一句的概率
+  double_text_delay_min: 2.5
+  double_text_delay_max: 6.0
+  silence_chance: 0.0           # 偶尔不回（0=每条都回）
+  at_chance: 0.7
+  debounce_jitter: 1.0
+
+context:
+  window_messages: 100          # 每次带最近多少条对话
+  max_context_chars: 20000      # 历史总字数上限（和上一条要匹配）
+  persist_dir: "data/rooms"
+  summarize_after: 60
+
+wechat:
+  adapter: "wechatauto"         # 当前唯一可用方案（微信 4.x 读库收消息 + 窗口发送）
+
+  # ---- 多群配置：每个群独立人设 / 触发规则 ----
+  groups:
+    - name: "你的群名"     # 群名，必须和微信里一字不差
+      persona: "da_feiyu"        # 引用上面 personas 里的 id；不填=默认 persona
+      trigger: "all"             # 覆盖 chat.trigger
+    # 再挂一个群就这样加：
+    # - name: "另一个群"
+    #   persona: "assistant"
+    #   trigger: "mention"        # 只在被 @ 时回
+
+  # 单群模式（向后兼容）：只挂一个群时也可以只填 group_name
+  # group_name: "你的群名"
+
+  # ---- 私聊配置：每个对象可以独立人设 ----
+  private_chats:
+    - name: "小红"         # 对方的昵称或备注，必须和微信里一致
+      persona: "assistant"      # 引用 personas 里的 id
+      trigger: "all"             # 私聊一般用 all（每条都回）
+    # - name: "另一个朋友"
+    #   persona: "assistant"
+    #   trigger: "prefix"
+    #   prefix: "ds"
+
+  self_name: "机器人小号"        # 机器人小号昵称，防止误连主号
+  poll_seconds: 2.0             # 每 2 秒扫一次新消息
+  group_members: []             # wechatauto 会自动读群成员，留空即可
+  ignore_senders: []            # 这些人的消息不回复（wxid 或昵称）
+  allowed_groups: []            # 旧字段，多群模式用 groups
+  self_wxid: ""
+  queue_size: 256
+  media_workers: 2
+  task_ttl_seconds: 300
+  state_dir: "data/state"
+  wcf_port: 10086               # 历史 wcf 方案用，忽略
+  wcf_debug: false
+  window_minimize: true         # 历史 pyweixin 方案用，忽略
+
+# ------------------------------------------------------------------
+#  多媒体解析
+# ------------------------------------------------------------------
+vision:                         # 识图 / 看表情包（需模型支持图像输入）
+  enabled: false
+  detail: "low"                 # low 省 token；original 保留原图
+  max_chars: 160
+  media_dir: "data/media"
+  cache_size: 200
+  max_calls_per_minute: 20
+
+asr:                            # 语音转文字（本地 faster-whisper，离线）
+  enabled: false
+  model: "base"                 # tiny/base/small/medium
+  language: "zh"
+  device: "cpu"
+  compute_type: "int8"
+  models_dir: "data/models"
+  max_seconds: 120
+
+files:                          # 文件解析（文本 / Word / Excel / PDF）
+  enabled: false
+  max_text_chars: 2000
+  max_file_mb: 20
+  dir: "data/media/files"
+
+search:                         # 联网搜索（DeepSeek 官方 Search API，模型自主决定）
+  enabled: false
+  count: 8
+  need_content: false
+  max_results_for_model: 4
+  max_chars: 2500
+  timeout: 60
+  max_per_minute: 10
+  cache_ttl: 300
+  max_tool_rounds: 2
+
+logging:
+  level: "INFO"
+  dir: "logs"
+
+retention:                     # cleanup 命令的策略；0=不清理，不会自动删除
+  chat_days: 0
+  memory_days: 0
+  media_days: 30
+
+imagegen:                       # 生图（模型自主决定何时画图）
+  enabled: false
+  provider: "zhipu"            # zhipu / gemini / pollinations / openai；按供应商要求配置
+  model: "cogview-3-flash"
+  base_url: "https://open.bigmodel.cn/api/paas/v4"
+  api_key: ""                   # 智谱 Key：https://open.bigmodel.cn/
+  size: "1024x1024"
+  max_per_day: 10
+  per_minute: 1
+  out_dir: "data/media/generated"
+  style_suffix: "cartoon illustration, cute, soft colors, clean background"
+  translate_prompt: false       # 智谱/Gemini 不需要；pollinations 需要 true
+  max_keep: 100
+
+memory:                         # 长期记忆（人物档案）
+  enabled: false
+  dir: "data/memory"
+  every_n_messages: 40
+  max_facts: 24
+  max_inject_chars: 900
+
+stickers:                       # 表情库（复用对方常发表情）
+  enabled: false
+  dir: "data/stickers"
+  max_send_per_day: 5
+
+proactive:                      # 主动开场
+  enabled: false
+  min_gap_minutes: 45
+  max_gap_minutes: 180
+  active_from: "08:30"
+  active_to: "23:30"
+  max_per_day: 8
+  text_chance: 0.80
+  sticker_chance: 0.15
+  poke_chance: 0.05
+  targets: []
+  extra_prompt: ""

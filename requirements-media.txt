@@ -1,0 +1,6 @@
+-r requirements-wechat.txt
+pilk
+faster-whisper
+pypdf
+python-docx
+openpyxl

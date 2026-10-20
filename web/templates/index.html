@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ededed">
+  <meta name="description" content="不需要微信的本地群聊测试台：我、朋友和 DeepSeek 三人群聊演示">
+  <title>我、朋友和 DeepSeek · 网页群聊测试台</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2216%22%20fill%3D%22%234D6BFE%22%2F%3E%3Cpath%20d%3D%22M18%2022h28v16H30l-8%207v-7h-4z%22%20fill%3D%22%23fff%22%2F%3E%3C%2Fsvg%3E">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="stage">
+  <div class="aurora aurora-a" aria-hidden="true"></div>
+  <div class="aurora aurora-b" aria-hidden="true"></div>
+  <div class="aurora aurora-c" aria-hidden="true"></div>
+
+  <aside class="side-panel" aria-label="测试台说明">
+    <div class="side-brand">
+      <div class="brand-badge">DS</div>
+      <div class="brand-text">
+        <h1>网页群聊测试台</h1>
+        <p>不需要微信 · 不用扫码</p>
+      </div>
+    </div>
+
+    <section class="side-card">
+      <h2>群成员</h2>
+      <ul class="member-list">
+        <li>
+          <span class="avatar avatar-me" aria-hidden="true">我</span>
+          <div class="member-meta"><strong>我</strong><small>右侧绿气泡</small></div>
+        </li>
+        <li>
+          <span class="avatar avatar-friend" aria-hidden="true">友</span>
+          <div class="member-meta"><strong>朋友</strong><small>左侧白气泡</small></div>
+        </li>
+        <li>
+          <span class="avatar avatar-bot" aria-hidden="true">DS</span>
+          <div class="member-meta"><strong id="sideBotName">DeepSeek</strong><small>深色气泡 · 自动接话</small></div>
+        </li>
+      </ul>
+    </section>
+
+    <section class="side-card">
+      <h2>怎么玩</h2>
+      <ol class="tips">
+        <li>底部选发言人：我 / 朋友</li>
+        <li>输入一句话，回车发送</li>
+        <li>DeepSeek 按触发规则自动接话</li>
+      </ol>
+    </section>
+
+    <section class="side-card">
+      <h2>运行状态</h2>
+      <dl class="kv">
+        <div><dt>模式</dt><dd>离线模拟（不连微信）</dd></div>
+        <div><dt>触发规则</dt><dd id="sideTrigger">加载中…</dd></div>
+        <div><dt>上下文</dt><dd id="sideContext">加载中…</dd></div>
+        <div><dt>今日 Token</dt><dd id="sideTokens">0</dd></div>
+      </dl>
+    </section>
+    <p class="side-foot"><a href="/manage">打开可视化维护台 →</a></p>
+
+    <p class="side-foot">聊天记录保存在本机<br>生成回复时会将上下文发送给配置的模型服务</p>
+  </aside>
+
+  <main class="phone" id="phone">
+    <header class="chat-header">
+      <div class="header-row">
+        <div class="group-avatar" aria-hidden="true">
+          <span class="ga ga-me">我</span><span class="ga ga-friend">友</span><span class="ga ga-bot">DS</span>
+        </div>
+        <div class="header-info">
+          <h2 class="group-name" id="groupName">我、朋友和 DeepSeek</h2>
+          <p class="group-sub">
+            <span class="online-dot" aria-hidden="true"></span>
+            <span id="headerSub">3 人 · 模拟群聊</span>
+          </p>
+        </div>
+        <button class="icon-btn" id="resetBtn" type="button" title="重置演示：清空聊天记录和上下文" aria-label="重置演示">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 12a9 9 0 1 0 2.64-6.36"></path>
+            <path d="M3 4v5h5"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="summary-chips" id="summaryChips" aria-label="配置摘要">
+        <span class="chip" id="chipModel">模型 · <b>-</b></span>
+        <span class="chip" id="chipTrigger">触发 · <b>-</b></span>
+        <span class="chip" id="chipKey">API Key · <b>-</b></span>
+        <span class="chip chip-soft">离线演示</span>
+      </div>
+    </header>
+
+    <div class="chat-body" id="chatBody">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-avatars" aria-hidden="true">
+          <span class="avatar avatar-me">我</span>
+          <span class="avatar avatar-friend">友</span>
+          <span class="avatar avatar-bot">DS</span>
+        </div>
+        <h3>三人群聊，已经就绪</h3>
+        <p>这里不用登录微信，也不会连真实的微信账号。<br>选一个发言人，发一句话，DeepSeek 就会像群友一样接话。</p>
+        <div class="samples">
+          <button class="sample" type="button" data-speaker="朋友" data-text="今天中午吃什么？">今天中午吃什么？</button>
+          <button class="sample" type="button" data-speaker="我" data-text="这周末去哪玩比较好">这周末去哪玩比较好</button>
+          <button class="sample" type="button" data-speaker="朋友" data-text="@DeepSeek 讲个冷笑话">@DeepSeek 讲个冷笑话</button>
+        </div>
+      </div>
+      <div class="messages" id="messages" role="log" aria-live="polite" aria-label="群聊消息"></div>
+    </div>
+
+    <div class="notice-bar" id="noticeBar" hidden>
+      <span class="notice-icon" aria-hidden="true">i</span>
+      <span class="notice-text" id="noticeText"></span>
+    </div>
+
+    <div class="error-bar" id="errorBar" hidden role="alert">
+      <span class="error-icon" aria-hidden="true">!</span>
+      <span class="error-text" id="errorText">发送失败</span>
+      <button class="error-retry" id="retryBtn" type="button">重试</button>
+      <button class="error-close" id="errorClose" type="button" aria-label="关闭错误提示">×</button>
+    </div>
+
+    <footer class="composer">
+      <div class="composer-toolbar">
+        <label class="speaker-pick" for="speakerSelect">
+          <span class="speaker-label">发言人</span>
+          <span class="select-wrap">
+            <select id="speakerSelect" aria-label="选择发言人">
+              <option value="我">我</option>
+              <option value="朋友">朋友</option>
+            </select>
+          </span>
+        </label>
+        <button class="at-btn" id="atBtn" type="button" title="在输入框插入 @DeepSeek">@ 提及</button>
+        <span class="typing-hint">回车发送 · Shift + 回车换行</span>
+      </div>
+      <div class="composer-row">
+        <textarea id="messageInput" rows="1" maxlength="2000" placeholder="说点什么…" aria-label="消息内容"></textarea>
+        <button class="send-btn" id="sendBtn" type="button">
+          <span class="send-label">发送</span>
+        </button>
+      </div>
+    </footer>
+  </main>
+</div>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

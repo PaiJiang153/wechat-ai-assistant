@@ -1,0 +1,45 @@
+# 敏感配置
+config.yaml
+config.yaml.bak*
+*.manage.lock
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+credentials*.json
+config.local.*
+*.db
+*.sqlite*
+
+# 运行时数据
+data/
+logs/
+wechatauto_logs/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+
+# 打包产物
+dist/
+
+# 临时/调试
+.ref/
+.scratch/
+installers/
+tools/
+# 个人环境的历史排查记录与旧聊天截图，不属于公开发行内容
+/docs/archive/
+/docs/screenshots/web-console-*.png
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store

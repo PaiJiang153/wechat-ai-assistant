@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="management-token" content="{{ management_token }}">
+  <meta name="color-scheme" content="light">
+  <title>鲸鱼维护台 · 本地管理</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/manage.css') }}">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%231f6654'/%3E%3Cpath d='M13 32c0-8 7-13 17-13s15 6 15 14c5 0 7-3 8-6 2 12-5 20-18 20-14 0-22-6-22-15' fill='%23fff'/%3E%3Ccircle cx='25' cy='30' r='2' fill='%231f6654'/%3E%3C/svg%3E">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" aria-label="主要导航">
+    <a class="brand" href="#overview"><span class="brand-symbol" aria-hidden="true">鲸</span><span>鲸鱼维护台<small>LOCAL WORKSPACE</small></span></a>
+    <div class="nav-label">日常维护</div>
+    <nav id="navigation">
+      <a href="#overview" data-page="overview" class="nav-item active"><span aria-hidden="true">◫</span>运行总览</a>
+      <a href="#memory" data-page="memory" class="nav-item"><span aria-hidden="true">◈</span>长期记忆</a>
+      <a href="#cleanup" data-page="cleanup" class="nav-item"><span aria-hidden="true">⌑</span>数据清理</a>
+      <a href="#backups" data-page="backups" class="nav-item"><span aria-hidden="true">▣</span>备份中心</a>
+      <a href="#logs" data-page="logs" class="nav-item"><span aria-hidden="true">≡</span>运行日志</a>
+      <div class="nav-label settings-label">个性与行为</div>
+      <a href="#settings" data-page="settings" class="nav-item"><span aria-hidden="true">⚙</span>高级设置<span class="nav-badge">NEW</span></a>
+    </nav>
+    <div class="sidebar-foot"><span class="small-dot"></span>在这台电脑上管理<small>让维护更轻松一点。</small><button id="shutdownManage" class="button ghost compact" type="button" hidden>关闭维护台</button></div>
+  </aside>
+
+  <main class="workspace">
+    <header class="topbar"><div><span class="breadcrumb">我的机器人</span><span class="slash">/</span><span id="pageTitle">运行总览</span></div><div class="topbar-right"><span class="local-badge"><span class="small-dot"></span>仅本机</span><button id="refreshAll" class="button compact ghost" type="button">↻ 刷新</button></div></header>
+    <div class="content">
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+
+      <section id="page-overview" class="page">
+        <div class="page-heading"><div><div class="eyebrow">工作区概况</div><h1>日常维护，尽在这里。</h1><p>看看运行情况，整理记忆，给下一次聊天留出空间。</p></div><div class="heartbeat" id="heartbeat"><span class="status-dot"></span><span id="heartbeatText">正在读取运行状态</span></div></div>
+        <div class="stat-grid">
+          <article class="stat-card"><div class="stat-label">本次收到消息<span class="stat-icon">↙</span></div><strong id="statReceived">—</strong><small>来自最近一次机器人运行记录</small></article>
+          <article class="stat-card"><div class="stat-label">今日确认发送<span class="stat-icon green">↗</span></div><strong id="statSent">—</strong><small>已确认送达的文字与图片</small></article>
+          <article class="stat-card"><div class="stat-label">今日模型 Token<span class="stat-icon sand">✦</span></div><strong id="statTokens">—</strong><small>文本模型及记忆整理的用量</small></article>
+        </div>
+        <div class="overview-grid">
+          <article class="panel target-panel"><div class="panel-heading"><h2>正在使用的会话配置</h2><span class="muted" id="targetCount">—</span></div><div id="targetList" class="target-list"><div class="empty">正在读取会话配置…</div></div><div class="panel-foot"><span class="small-dot"></span><span id="modelInfo">正在读取模型配置</span></div></article>
+          <article class="panel"><div class="panel-heading"><h2>发送与运行</h2><span class="soft-label">最近记录</span></div><dl class="health-list"><div><dt>明确失败</dt><dd id="healthFailed">—</dd></div><div><dt>尚未确认</dt><dd id="healthUnknown">—</dd></div><div><dt>平均排队</dt><dd id="healthQueue">—</dd></div><div><dt>上次状态更新</dt><dd id="healthUpdated">—</dd></div></dl><p class="fine-print">维护台与机器人独立运行。状态来自心跳记录，打开这个页面不会启动自动回复。</p></article>
+        </div>
+        <div class="section-heading"><h2>常用操作</h2><span>按需要，慢慢整理。</span></div>
+        <div class="shortcut-grid"><a href="#memory" class="shortcut"><span class="shortcut-symbol">◈</span><strong>整理长期记忆</strong><p>查看它记住了什么，修正或删去旧信息。</p><span class="arrow">↗</span></a><a href="#settings" class="shortcut"><span class="shortcut-symbol sand">⚙</span><strong>调整高级参数</strong><p>让回答、节奏和主动聊天更合你的习惯。</p><span class="arrow">↗</span></a><a href="#backups" class="shortcut"><span class="shortcut-symbol lavender">▣</span><strong>留一份备份</strong><p>将聊天、记忆和运行状态保存下来。</p><span class="arrow">↗</span></a></div>
+      </section>
+
+      <section id="page-memory" class="page" hidden>
+        <div class="page-heading"><div><div class="eyebrow">记住值得记住的</div><h1>长期记忆</h1><p>每个会话独立保存。每行一条事实，可以修改，也可以忘记。</p></div></div>
+        <div class="memory-layout panel">
+          <aside class="profile-sidebar"><label class="search-field"><span>⌕</span><input id="memorySearch" type="search" placeholder="搜索会话名称" aria-label="搜索会话名称"></label><div id="profileList" class="profile-list"></div></aside>
+          <div class="profile-editor"><div id="memoryEmpty" class="editor-empty"><span class="large-symbol">◈</span><h2>选一个会话，看看记忆。</h2><p>有过聊天或保存过记忆的会话会出现在左侧。</p></div><div id="memoryDetail" hidden><div class="panel-heading"><div><h2 id="memoryName"></h2><p class="muted" id="memoryMeta"></p></div><span id="memoryCount" class="soft-label"></span></div><label class="field-label" for="memoryFacts">记忆内容</label><textarea id="memoryFacts" class="memory-textarea" placeholder="例如：小明喜欢猫&#10;小明正在准备考试"></textarea><div class="editor-foot"><span class="fine-print">每条最多 80 字；清空记忆不会删除聊天记录。</span><div class="button-row"><button type="button" id="clearMemory" class="button danger-ghost">清空记忆</button><button type="button" id="saveMemory" class="button primary">保存记忆</button></div></div></div></div>
+        </div>
+      </section>
+
+      <section id="page-cleanup" class="page" hidden>
+        <div class="page-heading"><div><div class="eyebrow">为新的聊天留点空间</div><h1>数据清理</h1><p>先预览，再确认。只有清单里的文件会被清理。</p></div></div>
+        <article class="panel"><div class="panel-heading"><h2>本次清理策略</h2><span class="soft-label">0 天 = 不按时间清理</span></div><div class="policy-grid"><label class="field"><span>聊天记录保留</span><div class="input-unit"><input id="chatDays" type="number" min="0" max="36500" step="1" value="0"><span>天</span></div></label><label class="field"><span>长期记忆保留</span><div class="input-unit"><input id="memoryDays" type="number" min="0" max="36500" step="1" value="0"><span>天</span></div></label><label class="field"><span>媒体文件保留</span><div class="input-unit"><input id="mediaDays" type="number" min="0" max="36500" step="1" value="30"><span>天</span></div></label></div><div class="panel-actions"><p class="fine-print">请先停止机器人再清理。生图还会按高级设置中的保留数量筛选；本次填写不会修改默认策略。</p><button type="button" id="previewCleanup" class="button primary">预览可清理文件</button></div></article>
+        <article id="cleanupResults" class="panel cleanup-results" hidden><div class="panel-heading"><div><h2>待清理清单</h2><p id="cleanupSummary" class="muted"></p></div><button type="button" id="applyCleanup" class="button danger">确认清理</button></div><div id="cleanupFiles" class="file-list"></div></article>
+      </section>
+
+      <section id="page-backups" class="page" hidden>
+        <div class="page-heading"><div><div class="eyebrow">留住熟悉的聊天</div><h1>备份中心</h1><p>将聊天记录、长期记忆、表情索引和运行状态打包保存。</p></div><button type="button" id="createBackup" class="button primary">＋ 创建备份</button></div>
+        <div class="info-strip"><span>▣</span><p>备份不包含模型 Key 和原始图片、语音。为得到一致的快照，建议先停止机器人。</p></div><article class="panel"><div class="panel-heading"><h2>本机备份</h2><span id="backupCount" class="muted"></span></div><div id="backupList" class="backup-list"></div></article>
+      </section>
+
+      <section id="page-logs" class="page" hidden>
+        <div class="page-heading"><div><div class="eyebrow">发生了什么，一目了然</div><h1>运行日志</h1><p>最近 200 行运行记录。模型密钥会自动隐藏。</p></div><button type="button" id="refreshLogs" class="button secondary">↻ 读取最新日志</button></div><article class="panel log-panel"><div class="panel-heading"><h2>最近记录</h2><div class="button-row"><select id="logSource" aria-label="日志来源"><option value="bot">机器人日志</option><option value="manage">维护台日志</option></select><select id="logFilter" aria-label="日志级别筛选"><option value="">全部记录</option><option value="WARNING">提醒</option><option value="ERROR">错误</option></select></div></div><pre id="logContent" class="log-content" tabindex="0">正在读取日志…</pre></article>
+      </section>
+
+      <section id="page-settings" class="page" hidden>
+        <div class="page-heading"><div><div class="eyebrow">你的习惯，你来设定</div><h1>高级设置</h1><p>把复杂参数变成可读的选项。保存前可以逐项确认修改。</p></div><button type="button" id="undoSettings" class="button secondary" disabled>恢复上一次保存</button></div>
+        <div class="info-strip"><span>ⓘ</span><p>参数保存到当前配置文件。机器人相关参数需重启机器人后生效；维护台的清理策略会立即更新。</p></div>
+        <div class="settings-toolbar"><div id="settingsTabs" class="settings-tabs" role="tablist" aria-label="参数分类"></div><label class="search-field settings-search"><span>⌕</span><input type="search" id="settingsSearch" placeholder="搜索参数" aria-label="搜索高级参数"></label></div>
+        <div id="settingsBody" class="settings-body"><div class="panel empty">正在读取当前参数…</div></div>
+        <div id="settingsBar" class="settings-savebar"><div><strong id="dirtyCount">所有设置已保存</strong><span id="settingsHint">读取当前配置后即可调整。</span></div><div class="button-row"><button type="button" id="resetSettings" class="button ghost">恢复本分类默认值</button><button type="button" id="discardSettings" class="button secondary" disabled>放弃修改</button><button type="button" id="saveSettings" class="button primary" disabled>查看并保存</button></div></div>
+      </section>
+
+      <footer class="page-footer"><span>鲸鱼维护台</span><span id="syncTime">正在连接本地服务…</span></footer>
+    </div>
+  </main>
+</div>
+<dialog id="confirmDialog" class="confirm-dialog" aria-labelledby="dialogTitle"><div class="dialog-inner"><div class="eyebrow">操作确认</div><h2 id="dialogTitle"></h2><p id="dialogDescription"></p><div id="dialogDetails" class="dialog-details" hidden></div><div class="button-row dialog-actions"><button type="button" id="dialogCancel" class="button secondary">取消</button><button type="button" id="dialogConfirm" class="button primary">确认</button></div></div></dialog>
+<script src="{{ url_for('static', filename='js/manage.js') }}"></script>
+</body>
+</html>
