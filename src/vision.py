@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Optional
 
 from .config import DeepSeekConfig, VisionConfig
+from . import net
 
 log = logging.getLogger("dsbot.vision")
 
@@ -54,6 +55,7 @@ class VisionClient:
             base_url=ds.base_url,
             timeout=max(60.0, ds.timeout),
             max_retries=0,
+            http_client=net.openai_http_client(max(60.0, ds.timeout)),
         )
 
     # ------------------------------------------------------------------

@@ -23,8 +23,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-import requests
-
+from . import net
 from .config import ImageGenConfig
 from .runtime import atomic_json
 
@@ -169,7 +168,7 @@ class ImageGenerator:
         url = f"https://image.pollinations.ai/prompt/{quote(prompt, safe='')}"
         last_error = ""
         for attempt in range(3):
-            resp = requests.get(url, params=params, timeout=self.cfg.timeout)
+            resp = net.get(url, params=params, timeout=self.cfg.timeout)
             ctype = (resp.headers.get("content-type") or "").lower()
             if resp.status_code == 200 and "image" in ctype:
                 ext = ".png" if "png" in ctype else ".jpg"
@@ -209,7 +208,7 @@ class ImageGenerator:
             "n": 1,
         }
         payload.update(self.cfg.extra_params or {})
-        resp = requests.post(url, headers=headers, json=payload, timeout=self.cfg.timeout)
+        resp = net.post(url, headers=headers, json=payload, timeout=self.cfg.timeout)
         resp.raise_for_status()
         data = (resp.json() or {}).get("data") or []
         if not data:
@@ -219,7 +218,7 @@ class ImageGenerator:
             raw = base64.b64decode(item["b64_json"])
             return str(self._write(raw, key, self._sniff_ext(raw)))
         if item.get("url"):
-            img = requests.get(item["url"], timeout=self.cfg.timeout)
+            img = net.get(item["url"], timeout=self.cfg.timeout)
             img.raise_for_status()
             raw = img.content
             ctype = img.headers.get("content-type") or ""
@@ -270,7 +269,7 @@ class ImageGenerator:
 
         last_error = ""
         for attempt in range(3):
-            resp = requests.post(url, headers=headers, json=payload, timeout=self.cfg.timeout)
+            resp = net.post(url, headers=headers, json=payload, timeout=self.cfg.timeout)
             if resp.status_code == 200:
                 data = resp.json() or {}
                 parts = (

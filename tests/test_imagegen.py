@@ -31,7 +31,7 @@ def test_pollinations_generates_and_caches(tmp_path, monkeypatch):
         calls.append((url, params))
         return FakeResponse(JPEG)
 
-    monkeypatch.setattr("src.imagegen.requests.get", fake_get)
+    monkeypatch.setattr("src.imagegen.net.get", fake_get)
     cfg = ImageGenConfig(out_dir=str(tmp_path), provider="pollinations")
     gen = ImageGenerator(cfg)
     path = gen.generate("一只吃白饭的蓝色鲸鱼")
@@ -46,7 +46,7 @@ def test_openai_provider_b64(tmp_path, monkeypatch):
     def fake_post(url, headers=None, json=None, timeout=None):
         return FakeResponse(PNG)
 
-    monkeypatch.setattr("src.imagegen.requests.post", fake_post)
+    monkeypatch.setattr("src.imagegen.net.post", fake_post)
     cfg = ImageGenConfig(
         out_dir=str(tmp_path), provider="openai", api_key="sk-test", base_url="https://example.com/v1"
     )
@@ -56,7 +56,7 @@ def test_openai_provider_b64(tmp_path, monkeypatch):
 
 
 def test_rate_limit_daily(tmp_path, monkeypatch):
-    monkeypatch.setattr("src.imagegen.requests.get", lambda *a, **k: FakeResponse(JPEG))
+    monkeypatch.setattr("src.imagegen.net.get", lambda *a, **k: FakeResponse(JPEG))
     cfg = ImageGenConfig(out_dir=str(tmp_path), provider="pollinations", max_per_day=1, per_minute=100)
     gen = ImageGenerator(cfg)
     assert gen.generate("一张图") is not None
@@ -97,7 +97,7 @@ def test_gemini_provider_inline_data(tmp_path, monkeypatch):
                 ]
             }
 
-    monkeypatch.setattr("src.imagegen.requests.post", lambda *a, **k: GeminiResponse())
+    monkeypatch.setattr("src.imagegen.net.post", lambda *a, **k: GeminiResponse())
     cfg = ImageGenConfig(
         out_dir=str(tmp_path),
         provider="gemini",
@@ -127,8 +127,8 @@ def test_zhipu_provider_url_response(tmp_path, monkeypatch):
         def raise_for_status(self):
             return None
 
-    monkeypatch.setattr("src.imagegen.requests.post", lambda *a, **k: PostResp())
-    monkeypatch.setattr("src.imagegen.requests.get", lambda *a, **k: GetResp())
+    monkeypatch.setattr("src.imagegen.net.post", lambda *a, **k: PostResp())
+    monkeypatch.setattr("src.imagegen.net.get", lambda *a, **k: GetResp())
     cfg = ImageGenConfig(
         out_dir=str(tmp_path), provider="zhipu", api_key="zhipu-test", model="cogview-3-flash"
     )

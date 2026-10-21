@@ -16,8 +16,7 @@ import threading
 from collections import deque
 from typing import Any
 
-import requests
-
+from . import net
 from .config import DeepSeekConfig, SearchConfig
 
 log = logging.getLogger("dsbot.search")
@@ -78,7 +77,7 @@ class SearchClient:
         last_error: Exception | None = None
         for attempt in range(3):
             try:
-                resp = requests.post(self.endpoint, headers=headers, json=payload, timeout=self.cfg.timeout)
+                resp = net.post(self.endpoint, headers=headers, json=payload, timeout=self.cfg.timeout)
                 if resp.status_code in (429, 500, 502, 503, 504):
                     raise RuntimeError(f"HTTP {resp.status_code}")
                 resp.raise_for_status()

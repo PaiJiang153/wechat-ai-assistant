@@ -64,9 +64,9 @@ _TYPE_LABELS = {
 def _download_file(url: str, dest: Path, timeout: float = 30.0) -> bool:
     """把 URL 下载到本地文件（表情包 cdnurl 下载下来就是标准 GIF/PNG）。"""
     try:
-        import requests
+        from . import net
 
-        resp = requests.get(url, timeout=timeout)
+        resp = net.get(url, timeout=timeout)
         resp.raise_for_status()
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(resp.content)

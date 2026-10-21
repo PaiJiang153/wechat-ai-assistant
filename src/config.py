@@ -89,6 +89,13 @@ class ImageGenConfig:
 
 
 @dataclass
+class NetworkConfig:
+    """网络出口：默认直连，避免系统代理（Clash 等）没开时 API 调用失败。"""
+
+    use_system_proxy: bool = False   # true = 跟随系统代理（代理软件需保持运行）
+
+
+@dataclass
 class MemoryConfig:
     """长期记忆：定期把聊天里的事实摘成「人物档案」，注入人设。"""
 
@@ -315,6 +322,7 @@ class AppConfig:
     files: FilesConfig = field(default_factory=FilesConfig)
     search: SearchConfig = field(default_factory=SearchConfig)
     imagegen: ImageGenConfig = field(default_factory=ImageGenConfig)
+    network: NetworkConfig = field(default_factory=NetworkConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     stickers: StickerConfig = field(default_factory=StickerConfig)
     proactive: ProactiveConfig = field(default_factory=ProactiveConfig)
@@ -341,6 +349,7 @@ class AppConfig:
             ("files", FilesConfig),
             ("search", SearchConfig),
             ("imagegen", ImageGenConfig),
+            ("network", NetworkConfig),
             ("memory", MemoryConfig),
             ("stickers", StickerConfig),
             ("proactive", ProactiveConfig),

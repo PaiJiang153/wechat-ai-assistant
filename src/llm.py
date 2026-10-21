@@ -12,6 +12,7 @@ import threading
 from typing import Any, Sequence
 
 from .config import DeepSeekConfig
+from . import net
 from .runtime import UsageMeter
 
 log = logging.getLogger("dsbot.llm")
@@ -42,6 +43,7 @@ class DeepSeekClient:
             base_url=cfg.base_url,
             timeout=cfg.timeout,
             max_retries=0,  # 重试逻辑自己控制，便于日志和测试
+            http_client=net.openai_http_client(cfg.timeout),
         )
         self.last_usage: dict[str, Any] = {}
 

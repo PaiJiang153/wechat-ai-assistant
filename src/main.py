@@ -619,8 +619,15 @@ def main(argv: list[str] | None = None) -> int:
             return 2
     if cmd == "check":
         setup_logging(cfg, quiet_console=True)
+        from . import net
+
+        net.configure(cfg.network.use_system_proxy)
         return cmd_check(cfg)
     setup_logging(cfg, filename="manage.log" if cmd == "manage" else "bot.log")
+    # 网络出口：默认直连，避免系统代理（Clash 等）没启动时调用 API 直接 Connection error
+    from . import net
+
+    net.configure(cfg.network.use_system_proxy)
     if cmd == "mock":
         return cmd_mock(cfg)
     if cmd == "web":

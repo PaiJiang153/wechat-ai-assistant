@@ -45,7 +45,7 @@ def test_search_client_formats_results(monkeypatch):
             }
         )
 
-    monkeypatch.setattr("src.websearch.requests.post", fake_post)
+    monkeypatch.setattr("src.websearch.net.post", fake_post)
     cfg = SearchConfig(count=5, max_results_for_model=2)
     client = SearchClient(DeepSeekConfig(api_key="sk-test"), cfg)
     text = client.search_and_format("AI 新闻")

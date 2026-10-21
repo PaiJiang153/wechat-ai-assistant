@@ -173,6 +173,9 @@ logging:
   level: "INFO"
   dir: "logs"
 
+network:                        # 网络出口
+  use_system_proxy: false       # false=直连（推荐，代理没开也不会报 Connection error）
+
 retention:                     # cleanup 命令的策略；0=不清理，不会自动删除
   chat_days: 0
   memory_days: 0
