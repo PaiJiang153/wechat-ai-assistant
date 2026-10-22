@@ -79,7 +79,7 @@ humanize:                       # 拟人化：节奏/条数/随机性
   split_max_chars: 140
   split_delay_min: 0.6
   split_delay_max: 1.8
-  double_text_chance: 0.10      # 发完补一句的概率
+  double_text_chance: 0.0       # 发完补一句：静态补句太生硬，默认关闭
   double_text_delay_min: 2.5
   double_text_delay_max: 6.0
   silence_chance: 0.0           # 偶尔不回（0=每条都回）
@@ -137,8 +137,8 @@ wechat:
 # ------------------------------------------------------------------
 vision:                         # 识图 / 看表情包（需模型支持图像输入）
   enabled: false
-  detail: "low"                 # low 省 token；original 保留原图
-  max_chars: 160
+  detail: "high"                # 要看清图里的文字用 high；low 省 token
+  max_chars: 200
   media_dir: "data/media"
   cache_size: 200
   max_calls_per_minute: 20
@@ -206,6 +206,7 @@ stickers:                       # 表情库（复用对方常发表情）
   enabled: false
   dir: "data/stickers"
   max_send_per_day: 5
+  reply_chance: 0.06            # 正常回复后随机补一张表情包的概率（0=不发）
 
 proactive:                      # 主动开场
   enabled: false

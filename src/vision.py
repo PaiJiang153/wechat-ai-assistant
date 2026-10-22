@@ -67,7 +67,16 @@ class VisionClient:
         if not path.exists():
             return ""
         try:
-            data, mime = self._prepare(path)
+            with open(path, "rb") as fh:
+                head = fh.read(12)
+            valid = (
+                head[:3] == b"\xff\xd8\xff"
+                or head[:4] in (b"\x89PNG", b"GIF8", b"RIFF")
+            )
+            if not valid:
+                log.debug("跳过非图片文件（加密表情缓存/未知格式）：%s", path.name)
+                return ""
+            data, mime = self._prepare(path, self.vcfg.detail)
         except Exception as exc:  # noqa: BLE001
             log.warning("图片预处理失败 %s：%s", path, exc)
             return ""
@@ -149,8 +158,11 @@ class VisionClient:
         return True
 
     @staticmethod
-    def _prepare(path: Path) -> tuple[bytes, str]:
-        """读图片并按需压缩：动图取首帧、超大图缩到 1600px、格式不识别就转 JPEG。"""
+    def _prepare(path: Path, detail: str = "low") -> tuple[bytes, str]:
+        """读图片并按需压缩：动图取首帧、超大图按 detail 缩放、格式不识别就转 JPEG。
+
+        detail=high 时保留更高分辨率（2048px）并提高 JPEG 质量，方便看清图里的文字。
+        """
         data = path.read_bytes()
         suffix = path.suffix.lower()
         mime = _MIME.get(suffix, "")
@@ -166,12 +178,14 @@ class VisionClient:
         if need_convert:
             from PIL import Image
 
+            max_side = 2048 if detail in ("high", "original") else 1600
+            quality = 90 if detail in ("high", "original") else 85
             with Image.open(io.BytesIO(data)) as im:
                 if suffix == ".gif":
                     im.seek(0)
                 im = im.convert("RGB")
-                im.thumbnail((1600, 1600))
+                im.thumbnail((max_side, max_side))
                 buf = io.BytesIO()
-                im.save(buf, format="JPEG", quality=85)
+                im.save(buf, format="JPEG", quality=quality)
             return buf.getvalue(), "image/jpeg"
         return data, mime

@@ -26,6 +26,16 @@ def _key(name: str) -> str:
     return hashlib.sha1(name.encode("utf-8")).hexdigest()[:16]
 
 
+def _is_image(path: Path) -> bool:
+    """按文件头判断能不能当图片发（旧版本可能把加密的微信缓存登记进来）。"""
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(12)
+    except OSError:
+        return False
+    return head[:3] == b"\xff\xd8\xff" or head[:4] in (b"\x89PNG", b"GIF8", b"RIFF")
+
+
 class StickerStore:
     def __init__(self, root: str | Path, max_items: int = 80) -> None:
         self.dir = Path(root)
@@ -86,9 +96,13 @@ class StickerStore:
         log.info("表情库 +1（%s，共 %d 张）：%s", chat, len(data["items"]), Path(path).name)
 
     def pick(self, chat: str, rng: random.Random | None = None) -> str | None:
-        """按出现次数加权挑一张对方常用的表情；文件不存在会自动清理。"""
+        """按出现次数加权挑一张对方常用的表情；文件不存在或不是图片会自动清理。"""
         data = self.load(chat)
-        items = [i for i in data.get("items") or [] if i.get("path") and Path(str(i["path"])).exists()]
+        items = [
+            i
+            for i in data.get("items") or []
+            if i.get("path") and Path(str(i["path"])).exists() and _is_image(Path(str(i["path"])))
+        ]
         if len(items) != len(data.get("items") or []):
             data["items"] = items
             self.save(data)

@@ -114,6 +114,7 @@ class StickerConfig:
     enabled: bool = True
     dir: str = "data/stickers"
     max_send_per_day: int = 5
+    reply_chance: float = 0.06             # 正常回复后随机补一张表情包的概率
 
 
 @dataclass
@@ -169,11 +170,9 @@ class HumanizeConfig:
     split_max_chars: int = 140
     split_delay_min: float = 0.6
     split_delay_max: float = 1.8
-    # 发完再补一句（"对了…"）
-    double_text_chance: float = 0.10
-    double_texts: list[str] = field(
-        default_factory=lambda: ["对了", "算了 没事", "你继续说", "我刚想起来个事", "行吧"]
-    )
+    # 发完再补一句：静态补句太生硬（"对了""我刚想起来个事"），默认关闭
+    double_text_chance: float = 0.0
+    double_texts: list[str] = field(default_factory=list)
     double_text_delay_min: float = 2.5
     double_text_delay_max: float = 6.0
     # 偶尔已读不回（默认关：保持"每条都回"）
@@ -255,11 +254,12 @@ class VisionConfig:
     """识图 / 看表情包（deepseek-flash 支持图像理解）。"""
 
     enabled: bool = True
-    detail: str = "low"                   # low 最省 token；需要看清细节改 original
-    max_chars: int = 160                  # 描述文字上限
+    detail: str = "low"                   # low 最省 token；要看图里的文字改成 high
+    max_chars: int = 200                  # 描述文字上限（含摘录的图中文字）
     image_prompt: str = (
-        "这是微信群聊里别人发的一张图片。用一句中文说清它是什么内容、有没有文字，"
-        "80 字以内，不要客套话。"
+        "这是微信群聊里别人发的一张图片。先用一句中文说清它是什么；"
+        "如果图里有文字（标题、按钮、数字、聊天记录、报错信息等），把文字逐字摘出来，不要漏。"
+        "总共 120 字以内，不要客套话。"
     )
     sticker_prompt: str = (
         "这是微信群聊里的一个表情包（可能是动图）。用一句中文说明它画的是什么、"
@@ -475,6 +475,8 @@ class AppConfig:
             raise ValueError("asr.max_seconds 必须大于 0")
         if not 1 <= self.search.count <= 50:
             raise ValueError("search.count 必须在 1~50 之间")
+        if not 0.0 <= self.stickers.reply_chance <= 1.0:
+            raise ValueError("stickers.reply_chance 必须在 0~1 之间")
         if self.humanize.typing_chars_per_second <= 0:
             raise ValueError("humanize.typing_chars_per_second 必须大于 0")
         for name in ("split_chance", "double_text_chance", "silence_chance", "at_chance"):

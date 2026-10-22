@@ -89,6 +89,9 @@ class Bot:
         self._stop = threading.Event()
         self._scheduler: ProactiveScheduler | None = None
         self._pending_since: dict[str, float] = {}
+        # 表情包发送配额（每天最多 stickers.max_send_per_day 张）
+        self._sticker_day = ""
+        self._sticker_sent = 0
         self._timer_versions: dict[str, int] = {}
         self._last_activity: dict[str, float] = {}
         self._ready: dict[str, deque] = {}
@@ -243,7 +246,7 @@ class Bot:
             targets_fn=targets,
             text_fn=lambda room_id, room_name: self.engine.generate_proactive(room_id, room_name, commit=False),
             send_text=lambda room_id, text: self._safe_send(room_id, None, text),
-            send_sticker=self._send_image,
+            send_sticker=self._send_sticker_limited,
             poke=lambda room_id: self._record_delivery(self._await_delivery(self.adapter.poke(room_id))),
             pick_sticker=pick_sticker,
             stop_event=self._stop,
@@ -382,6 +385,10 @@ class Bot:
                         self._stop.wait(random.uniform(human.split_delay_min, human.split_delay_max))
                     else:
                         self._stop.wait(0.8)
+            # 拟人：偶尔像真人一样顺手甩一张表情包
+            if delivered and self.cfg.stickers.enabled and self.cfg.stickers.reply_chance > 0:
+                if random.random() < self.cfg.stickers.reply_chance:
+                    self._send_random_sticker(room_id, batch[-1].room_name)
             # 拟人：发完再补一句
             if delivered and human.enabled and human.double_texts and human.double_text_chance > 0 and random.random() < human.double_text_chance:
                 if not self._stop.is_set():
@@ -488,12 +495,12 @@ class Bot:
             log.exception("发送失败：%s", exc)
         return False
 
-    def _send_image(self, room_id: str, path: str) -> bool:
+    def _send_image(self, room_id: str, path: str, commit_text: str = "[已发送图片]") -> bool:
         try:
             if self._stop.is_set() or not self._rate_ok(room_id):
                 return False
             def accept():
-                self.engine.commit_reply(room_id, "[已发送图片]")
+                self.engine.commit_reply(room_id, commit_text)
                 with self._guard:
                     self._last_activity[room_id] = time.monotonic()
                     self._last_reply_at[room_id] = time.time()
@@ -506,6 +513,43 @@ class Bot:
             self.stats.add("errors")
             self._record_delivery(DeliveryResult("failed", str(exc)))
             log.exception("发送图片失败：%s", exc)
+        return False
+
+    # ------------------------------------------------------------------ 表情包
+    def _sticker_quota_ok(self) -> bool:
+        today = time.strftime("%Y-%m-%d")
+        if today != self._sticker_day:
+            self._sticker_day = today
+            self._sticker_sent = 0
+        limit = self.cfg.stickers.max_send_per_day
+        return limit <= 0 or self._sticker_sent < limit
+
+    def _send_random_sticker(self, room_id: str, room_name: str) -> bool:
+        """从该会话的表情库里挑一张对方常用的发出去（受每日配额限制）。"""
+        store = getattr(self.adapter, "sticker_store", None)
+        if store is None or not room_name or not self._sticker_quota_ok():
+            return False
+        try:
+            path = store.pick(room_name)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("挑选表情包失败：%s", exc)
+            return False
+        if not path:
+            return False
+        if self._stop.wait(random.uniform(1.0, 2.5)):
+            return False
+        if self._send_image(room_id, path, commit_text="[表情包]"):
+            self._sticker_sent += 1
+            return True
+        return False
+
+    def _send_sticker_limited(self, room_id: str, path: str) -> bool:
+        """主动开场用：发之前也过一遍每日配额。"""
+        if not self._sticker_quota_ok():
+            return False
+        if self._send_image(room_id, path, commit_text="[表情包]"):
+            self._sticker_sent += 1
+            return True
         return False
 
     def feed(self, messages: Iterable[IncomingMessage]) -> None:

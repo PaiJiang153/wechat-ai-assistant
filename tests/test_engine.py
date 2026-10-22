@@ -209,7 +209,10 @@ def test_generate_splits_long_reply(store, llm):
     chunks = engine.generate([make_msg("说长一点")])
     assert len(chunks) == 2
     assert all(len(c) <= 50 for c in chunks)
-    assert "".join(chunks) == long_text
+    # 全局规则：句尾句号会被去掉，中间的句号换成逗号
+    from src.engine import sanitize_reply
+
+    assert "".join(chunks) == sanitize_reply(long_text)
 
 
 def test_generate_sanitizes_llm_output(store, llm):

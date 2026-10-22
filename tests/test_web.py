@@ -172,7 +172,9 @@ def test_multi_chunk_reply_lists_all_bubbles(tmp_path, monkeypatch):
     assert len(bots) == 2
     assert bots[0]["at"] == "@朋友"
     assert bots[1]["at"] is None  # 只有第一条 @ 人
-    assert "".join(m["text"] for m in bots) == long_reply
+    from src.engine import sanitize_reply
+
+    assert "".join(m["text"] for m in bots) == sanitize_reply(long_reply)
 
 
 # ======================================================================

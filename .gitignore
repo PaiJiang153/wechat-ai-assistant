@@ -1,6 +1,7 @@
 # 敏感配置
 config.yaml
 config.yaml.bak*
+config.yaml.pre-*
 *.manage.lock
 .env
 .env.*

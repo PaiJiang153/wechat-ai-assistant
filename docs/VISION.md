@@ -10,24 +10,42 @@
    ├─ 图片：wechatauto 从微信本地库解密出 JPEG → data/media/
    │
    ├─ 表情包：从消息 XML 里的 cdnurl 下载（下载下来就是标准 GIF）→ data/media/emoji_<md5>.gif
-   │          （下载失败才退回本机缓存）
+   │          （cdnurl/thumburl 都失败就跳过，不会把加密的微信表情缓存喂给模型）
    ▼
-DeepSeek 视觉模型（deepseek-flash，detail=low）
+DeepSeek 视觉模型（deepseek-flash，detail=high 时能看清图里的文字）
    │  同一张图按内容 SHA1 缓存，只识别一次
    ▼
-"[图片] 这是一张Steam库截图……" / "[表情包] 黄小鸡呆滞地盯着人，表示无语"
+"[图片] 图中文字：订单编号 2026-1022-A7；金额 ¥128.50……"
    │
    ▼
 进上下文 → 大肥鱼照着人设接话
 ```
+
+## 看清图片里的文字
+
+`detail: "low"` 省 token 但**读不清字**。要看图里的文字/报错/表格/聊天记录，用：
+
+```yaml
+vision:
+  detail: "high"        # 高分辨率，能摘录图中文字
+  max_chars: 200
+```
+
+实测（1000×420 的文字截图）：
+
+```
+识别结果：图中文字为：订单编号：2026-1022-A7；金额：¥128.50；请于本周五前付款；联系人：派酱。
+```
+
+代价：high 比 low 每张图多花一些 token（约 1~2k），但 OCR 效果完全够用。
 
 ## 配置（`config.yaml`）
 
 ```yaml
 vision:
   enabled: true                 # 总开关
-  detail: "low"                 # low 最省 token（默认）；original 保留原图
-  max_chars: 160                # 描述文字上限
+  detail: "high"                # 要读图里的字用 high；low 省 token 但看不清字
+  max_chars: 200                # 描述文字上限（含摘录的图中文字）
   media_dir: "data/media"       # 下载的图片/表情包落盘位置
   cache_size: 200               # 最多缓存多少张图的结果
   max_calls_per_minute: 20      # 防图片刷屏烧额度

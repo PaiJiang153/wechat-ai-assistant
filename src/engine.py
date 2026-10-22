@@ -348,6 +348,11 @@ def sanitize_reply(text: str, bot_name: str = "") -> str:
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
     if bot_name:
         text = re.sub(rf"^\s*{re.escape(bot_name)}\s*[:：]\s*", "", text)
+    # 微信聊天习惯：句尾不用句号。中文句号一律换成逗号，再去掉行尾多余的逗号
+    text = re.sub(r"[。．]+", "，", text)
+    text = re.sub(r"，{2,}", "，", text)
+    text = re.sub(r"[，,、]+(?=\n|$)", "", text)
+    text = re.sub(r"[，,、]+\s*$", "", text)
     return text.strip()
 
 

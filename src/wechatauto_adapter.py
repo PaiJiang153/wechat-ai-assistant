@@ -61,6 +61,22 @@ _TYPE_LABELS = {
 }
 
 
+def _is_image_file(path: Path) -> bool:
+    """按文件头判断是不是真图片（微信表情缓存常是加密 wxgf/dat，不是图片）。"""
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(12)
+    except OSError:
+        return False
+    if head[:3] == b"\xff\xd8\xff":
+        return True
+    if head[:4] == b"\x89PNG":
+        return True
+    if head[:4] in (b"GIF8", b"RIFF"):
+        return True
+    return False
+
+
 def _download_file(url: str, dest: Path, timeout: float = 30.0) -> bool:
     """把 URL 下载到本地文件（表情包 cdnurl 下载下来就是标准 GIF/PNG）。"""
     try:
@@ -782,9 +798,8 @@ class WechatautoAdapter(WeChatAdapter):
         return f"[图片] {desc}" if desc else "[图片]"
 
     def _describe_sticker(self, row: dict, raw: str, room_name: str = "") -> str:
-        """表情包：优先从消息里的 cdnurl 下载（下载下来就是标准 GIF），
-        再用视觉模型判断内容和情绪；下载失败才退回本机缓存文件。
-        顺便把 GIF 登记进该群/私聊的表情库，供主动发表情包时复用。"""
+        """表情包：优先从消息里的下载地址取标准 GIF；取不到就放弃（不把加密缓存喂给模型）。
+        成功时顺便登记进该群/私聊的表情库，供主动发表情包时复用。"""
         if self.vision is None:
             return "[表情包]"
         match = re.search(r'md5="([0-9a-fA-F]{32})"', raw or "")
@@ -793,15 +808,25 @@ class WechatautoAdapter(WeChatAdapter):
         md5 = match.group(1).lower()
 
         path = Path(self.media_dir) / f"emoji_{md5}.gif"
-        if not (path.exists() and path.stat().st_size > 0):
-            url_match = re.search(r'cdnurl="([^"]+)"', raw or "")
-            downloaded = False
-            if url_match:
-                url = url_match.group(1).replace("&amp;", "&")
-                downloaded = _download_file(url, path)
-            if not downloaded:
-                cached = self._find_sticker_file(md5)
+        if not (path.exists() and _is_image_file(path)):
+            # 依次尝试消息里可能出现过的下载地址（cdnurl 是明文 GIF，最优先）
+            urls: list[str] = []
+            for attr in ("cdnurl", "cdnthumburl", "thumburl", "cdnbigurl"):
+                for m in re.finditer(rf'{attr}\s*=\s*"([^"]+)"', raw or ""):
+                    url = m.group(1).replace("&amp;", "&").strip()
+                    if url.startswith("http") and url not in urls:
+                        urls.append(url)
+            for url in urls:
+                if _download_file(url, path) and _is_image_file(path):
+                    break
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            if not (path.exists() and _is_image_file(path)):
+                cached = self._find_sticker_file(md5)  # 只返回能识别的图片
                 if not cached:
+                    log.debug("表情包 %s 无法下载或缓存不可读，跳过", md5[:8])
                     return "[表情包]"
                 path = cached
 
@@ -886,7 +911,11 @@ class WechatautoAdapter(WeChatAdapter):
         return f"[{label}] {title}" if title else f"[{label}]"
 
     def _find_sticker_file(self, md5: str) -> Optional[Path]:
-        """微信 4.x 的表情缓存路径：<账号目录>/cache/<年-月>/Emoticon/<md5前2位>/<md5>。"""
+        """微信 4.x 的表情缓存路径：<账号目录>/cache/<年-月>/Emoticon/<md5前2位>/<md5>。
+
+        注意：缓存文件经常是加密的（wxgf/加密 dat），必须跳过非图片文件，
+        否则会喂给 PIL 报 "cannot identify image file"。
+        """
         account_dir = getattr(self._db, "account_dir", None)
         if not account_dir:
             return None
@@ -899,7 +928,7 @@ class WechatautoAdapter(WeChatAdapter):
         for pattern in patterns:
             try:
                 for p in base.glob(pattern):
-                    if p.is_file():
+                    if p.is_file() and _is_image_file(p):
                         return p
             except Exception:  # noqa: BLE001
                 continue

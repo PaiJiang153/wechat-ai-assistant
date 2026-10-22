@@ -188,7 +188,7 @@ def test_sticker_uses_local_cache(tmp_path, monkeypatch):
     account_dir = tmp_path / "acc"
     sticker = account_dir / "cache" / "2026-10" / "Emoticon" / md5[:2] / md5
     sticker.parent.mkdir(parents=True)
-    sticker.write_bytes(b"gif-bytes")
+    sticker.write_bytes(b"GIF89a" + b"0" * 20)
     vision = FakeVision()
     adapter = make_adapter(vision=vision)
     adapter._db = type("DB", (), {"account_dir": str(account_dir)})()
@@ -197,6 +197,24 @@ def test_sticker_uses_local_cache(tmp_path, monkeypatch):
     text = adapter._normalise_content({"type": "动画表情", "content": raw})
     assert text == "[表情包] 一只橘猫趴在键盘上睡觉"
     assert vision.calls[0][1] == "sticker"
+
+
+def test_encrypted_sticker_cache_is_skipped(tmp_path, monkeypatch):
+    """微信表情缓存常是加密字节，不能喂给 PIL（否则报 cannot identify image file）。"""
+    install_fake(monkeypatch, [])
+    md5 = "ef" * 16
+    account_dir = tmp_path / "acc"
+    sticker = account_dir / "cache" / "2026-10" / "Emoticon" / md5[:2] / md5
+    sticker.parent.mkdir(parents=True)
+    sticker.write_bytes(b"\x9aQ\xa2\xeb\xdc\xd3F\x99\xbf\x7f\x16\xf0")
+    vision = FakeVision()
+    adapter = make_adapter(vision=vision)
+    adapter._db = type("DB", (), {"account_dir": str(account_dir)})()
+    adapter._group_id = GROUP_ID
+    raw = f'<msg><emoji md5="{md5}" len="100" /></msg>'
+    text = adapter._normalise_content({"type": "动画表情", "content": raw})
+    assert text == "[表情包]"
+    assert vision.calls == []
 
 
 def test_sticker_downloads_from_cdn(tmp_path, monkeypatch):
