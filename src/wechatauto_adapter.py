@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import html
 import logging
+import os
 import queue
 import re
 import threading
@@ -77,12 +78,77 @@ def _is_image_file(path: Path) -> bool:
     return False
 
 
-def _download_file(url: str, dest: Path, timeout: float = 30.0) -> bool:
-    """把 URL 下载到本地文件（表情包 cdnurl 下载下来就是标准 GIF/PNG）。"""
+_DOWNLOAD_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="dl")
+
+
+# 表情 CDN 域名兜底：vweixinf.tc.qq.com 在部分网络不可达（读超时），
+# 同一 path+query 换 wxapp.tc.qq.com 可正常返回。备用域名排前面，原域名兜底。
+_CDN_HOST_FALLBACK = {"vweixinf.tc.qq.com": "wxapp.tc.qq.com"}
+_EMOJI_EXTS = (".gif", ".png", ".jpg")
+_STICKER_DL_INFLIGHT: set[str] = set()
+_STICKER_DL_LOCK = threading.Lock()
+
+
+def _sticker_bg_download(md5: str, urls: list[str], media_dir: str) -> None:
+    """后台把表情下全（每个地址按候选域名逐个试），成功后按真实格式改名。
+
+    慢网络下一个表情要一分钟以上，同步等会把会话队列卡死，所以只做缓存：
+    本次先返回占位符，同一张表情下次出现时命中缓存就能识别。
+    """
+    try:
+        for url in urls:
+            cands = _sticker_url_candidates(url)
+            for cand in cands + cands[:1]:  # CDN 抖动大，首选域名末尾再补一次
+                dest = Path(media_dir) / f"emoji_{md5}.gif"
+                if _download_file(cand, dest, timeout=170.0):
+                    _retype_image(dest)
+                    log.info("表情包后台下载完成：%s", md5[:8])
+                    return
+    finally:
+        with _STICKER_DL_LOCK:
+            _STICKER_DL_INFLIGHT.discard(md5)
+
+
+def _retype_image(path: Path) -> None:
+    """按文件头改扩展名：表情 URL 不保证是 gif，错标会让识图的 MIME 失真。"""
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(12)
+        suffix = (
+            ".gif" if head[:4] == b"GIF8"
+            else ".jpg" if head[:3] == b"\xff\xd8\xff"
+            else ".png" if head[:4] == b"\x89PNG"
+            else ""
+        )
+        if suffix and path.suffix.lower() != suffix:
+            path.rename(path.with_suffix(suffix))
+    except OSError:
+        pass
+
+
+def _sticker_url_candidates(url: str) -> list[str]:
+    """一个表情下载地址的候选列表：备用域名优先，原地址兜底（去重）。"""
+    out = [url]
+    for bad, good in _CDN_HOST_FALLBACK.items():
+        if bad in url:
+            alt = url.replace(bad, good)
+            if alt not in out:
+                out.insert(0, alt)
+    return out
+
+
+def _download_file(url: str, dest: Path, timeout: float = 10.0) -> bool:
+    """把 URL 下载到本地文件（表情包 cdnurl 下载下来就是标准 GIF/PNG）。
+
+    requests 的 timeout 管不到 DNS 解析（getaddrinfo 可能长时间不返回），
+    而表情包下载跑在会话串行队列里，一卡就把整个群的接收堵死。所以把
+    GET 丢进独立线程、调用方按总时限等待，超时即放弃当前 URL。
+    """
     try:
         from . import net
 
-        resp = net.get(url, timeout=timeout)
+        future = _DOWNLOAD_POOL.submit(net.get, url, timeout=timeout)
+        resp = future.result(timeout=timeout + 5)
         resp.raise_for_status()
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(resp.content)
@@ -195,6 +261,11 @@ class WechatautoAdapter(WeChatAdapter):
 
     # ------------------------------------------------------------------ 生命周期
     def start(self) -> None:
+        # 调低库的写动作节奏参数（用户已知情选择速度优先，风控风险相应上升）：
+        # 1) WRITE_BURST=0：去掉"120s 内已写 N 次，冷却 45s"的突发限制（碎句连发会撞）；
+        # 2) WRITE_GAP=1.0：两次写动作间隔从 natural 档的 2.5~6s 降到 1~2s。
+        os.environ.setdefault("WECHATAUTO_WRITE_BURST", "0")
+        os.environ.setdefault("WECHATAUTO_WRITE_GAP", "1.0")
         from wechatauto import WeChat, WeChatDB  # 延迟导入
 
         self._db = WeChatDB()
@@ -256,6 +327,7 @@ class WechatautoAdapter(WeChatAdapter):
             )
 
         self._wx = WeChat()
+        self._patch_gui_focus()
 
         if self.vision is not None or self.asr is not None or self.file_summarizer is not None:
             try:
@@ -281,10 +353,38 @@ class WechatautoAdapter(WeChatAdapter):
         self._receiver.start()
         try:
             while not self._stop.is_set():
-                self._drain_outbox(limit=8)
+                self._drain_outbox()
                 self._stop.wait(0.1)
         finally:
             self.stop()
+
+    def _patch_gui_focus(self) -> None:
+        """连续给同一会话发附件时跳过"点击输入框聚焦"（省光标移动+0.6s 等待）。
+
+        附件粘贴前库每次都会物理点击输入框。这里包一层：UIA 确认微信输入框
+        仍持有键盘焦点（即上次发送后没人动过焦点）就直接复用，不点；焦点
+        丢了、换了会话、或探测失败，一律回到真实点击——宁可多花 0.6 秒，
+        也不能把粘贴发到别的窗口。发送本就全部经出站队列单线程串行，
+        同会话连发（文字→表情）天然命中复用分支。
+        """
+        gui = getattr(self._wx, "_gui", None)
+        if gui is None:
+            return
+        real_focus = gui.focus_input
+
+        def focus_input(box=None):
+            try:
+                uia = gui._get_uia()
+                edit = uia._chat_input() if uia is not None else None
+                if edit is not None and getattr(edit, "HasKeyboardFocus", False):
+                    if box is None:
+                        box = gui.get_input_box()
+                    return bool(box)
+            except Exception:  # noqa: BLE001
+                pass
+            return real_focus(box)
+
+        gui.focus_input = focus_input
 
     def stop(self) -> None:
         self._stop.set()
@@ -342,15 +442,22 @@ class WechatautoAdapter(WeChatAdapter):
             receipt.set_result(DeliveryResult("failed", "发送队列已满"))
         return receipt
 
-    def _drain_outbox(self, limit=8) -> None:
+    def _drain_outbox(self, grace: float = 0.8) -> None:
+        """把发送队列发完再还桌面：队列空后等 grace 秒，仍无新任务才还原窗口。
+
+        文字回复后紧跟的表情包会落进同一轮前台占用（同会话不二次跳转），
+        也避免批与批之间反复抢占/释放前台造成的等待。
+        """
         if self._outbox.empty():
             return
         try:
-            for _ in range(limit):
+            while not self._stop.is_set():
                 try:
                     room_id, kind, payload, at, receipt = self._outbox.get_nowait()
                 except queue.Empty:
-                    return
+                    if self._stop.wait(grace) or self._outbox.empty():
+                        return
+                    continue
                 if not receipt.set_running_or_notify_cancel():
                     continue
                 age = time.monotonic() - receipt.created_at
@@ -367,9 +474,8 @@ class WechatautoAdapter(WeChatAdapter):
                     result = DeliveryResult("unknown", str(exc))
                 result = result or DeliveryResult("unknown", "发送接口未返回确认")
                 receipt.set_result(DeliveryResult(result.status, result.detail, age))
-                self._stop.wait(0.8)
+                self._stop.wait(0.4)
         finally:
-            # 无论成功失败，都把微信窗口"还"回去，别占着你的桌面
             self._restore_desktop()
 
     def _send_file_now(self, room_id: str, path: str) -> None:
@@ -383,16 +489,21 @@ class WechatautoAdapter(WeChatAdapter):
             # 图片/GIF 走 send_image（剪贴板粘贴，微信按图片消息插入），
             # 这样表情包在聊天里显示为动图，而不是一个 .gif 文件。
             if gui is not None and suffix in (".gif", ".png", ".jpg", ".jpeg", ".webp", ".bmp"):
-                result = gui.send_image(path, who=chat, verify=True)
+                # 图片走粘贴路线，粘贴是否落框已有 UIA 回读校验；DB 轮询回执
+                # （图片最长 6s）会拖慢同批后续发送，这里不再等库确认
+                result = gui.send_image(path, who=chat, verify=False)
             else:
                 result = self._wx.SendFiles([path], who=chat)
-            status = str((result or {}).get("status") if isinstance(result, dict) else "")
+            # WxResponse 失败时 __bool__ 为 False，不能写 `result or {}`，
+            # 否则失败对象会被空字典吞掉，真实原因只剩下 "None"。
+            status = str(result.get("status") or "") if isinstance(result, dict) else ""
+            detail = str(result.get("message") or "") if isinstance(result, dict) else ""
             if "成功" in status:
                 label = "私聊" if self._is_private_room(room_id) else "群"
                 kind = "表情/图片" if suffix in (".gif", ".png", ".jpg", ".jpeg", ".webp", ".bmp") else "文件"
                 log.info("→ 已发送%s到%s「%s」：%s", kind, label, chat, Path(path).name)
             else:
-                log.warning("发送文件未确认：%s（%s）", status or result, Path(path).name)
+                log.warning("发送文件未确认：%s（%s）", detail or status or result, Path(path).name)
             verified_image = gui is not None and suffix in (".gif", ".png", ".jpg", ".jpeg", ".webp", ".bmp")
             return DeliveryResult("confirmed" if verified_image and "成功" in status else "unknown", status)
         except Exception as exc:  # noqa: BLE001
@@ -405,11 +516,11 @@ class WechatautoAdapter(WeChatAdapter):
         chat = self._name_for_room(room_id)
         try:
             result = self._wx.Poke(who=chat)
-            status = str((result or {}).get("status") if isinstance(result, dict) else "")
+            status = str(result.get("status") or "") if isinstance(result, dict) else ""
             if "成功" in status:
                 log.info("→ 已戳了戳「%s」", chat)
             else:
-                log.warning("戳一戳失败（%s）：%s", chat, (result or {}).get("message") if isinstance(result, dict) else result)
+                log.warning("戳一戳失败（%s）：%s", chat, result.get("message") if isinstance(result, dict) else result)
             return DeliveryResult("confirmed" if "成功" in status else "unknown", status)
         except Exception as exc:  # noqa: BLE001
             log.warning("戳一戳异常：%s", exc)
@@ -433,12 +544,13 @@ class WechatautoAdapter(WeChatAdapter):
                     result = gui.send_msg(text, who=group_name, verify=True)
                 else:
                     result = self._wx.SendMsg(text, who=group_name, **({"at": member} if member else {}))
-                status = str((result or {}).get("status") if isinstance(result, dict) else "")
+                status = str(result.get("status") or "") if isinstance(result, dict) else ""
+                detail = str(result.get("message") or "") if isinstance(result, dict) else ""
                 if "成功" in status:
                     label = "私聊" if self._is_private_room(room_id) else "群"
                     log.info("→ 已发送到%s「%s」：%s", label, group_name, text.replace("\n", " ")[:60])
                     return DeliveryResult("confirmed" if gui is not None else "unknown", "接口报告成功")
-                log.warning("发送未确认（第 %d 次）：%s", attempt, status or result)
+                log.warning("发送未确认（第 %d 次）：%s", attempt, detail or status or result)
             except Exception as exc:  # noqa: BLE001
                 log.warning("发送消息异常（第 %d 次）：%s", attempt, exc)
         return DeliveryResult("unknown", "发送未确认；为避免重复消息，不自动重发")
@@ -807,28 +919,47 @@ class WechatautoAdapter(WeChatAdapter):
             return "[表情包]"
         md5 = match.group(1).lower()
 
-        path = Path(self.media_dir) / f"emoji_{md5}.gif"
-        if not (path.exists() and _is_image_file(path)):
-            # 依次尝试消息里可能出现过的下载地址（cdnurl 是明文 GIF，最优先）
+        # 之前可能按真实格式存成 .gif/.png/.jpg，命中任一扩展名就算已缓存
+        path = None
+        for ext in _EMOJI_EXTS:
+            cand = Path(self.media_dir) / f"emoji_{md5}{ext}"
+            if cand.exists() and _is_image_file(cand):
+                path = cand
+                break
+        if path is None:
+            # 依次尝试消息里可能出现过的下载地址（cdnurl 是明文图，最优先）
             urls: list[str] = []
             for attr in ("cdnurl", "cdnthumburl", "thumburl", "cdnbigurl"):
                 for m in re.finditer(rf'{attr}\s*=\s*"([^"]+)"', raw or ""):
                     url = m.group(1).replace("&amp;", "&").strip()
                     if url.startswith("http") and url not in urls:
                         urls.append(url)
-            for url in urls:
-                if _download_file(url, path) and _is_image_file(path):
-                    break
-                try:
-                    path.unlink(missing_ok=True)
-                except OSError:
-                    pass
-            if not (path.exists() and _is_image_file(path)):
+            if urls:
+                # 快速尝试一次（只走首选候选域名）；慢网络一分钟起步，不能同步干等
+                dest = Path(self.media_dir) / f"emoji_{md5}.gif"
+                if _download_file(_sticker_url_candidates(urls[0])[0], dest, timeout=15.0):
+                    _retype_image(dest)
+                    for ext in _EMOJI_EXTS:
+                        cand = dest.with_suffix(ext)
+                        if cand.exists() and _is_image_file(cand):
+                            path = cand
+                            break
+            if path is None:
                 cached = self._find_sticker_file(md5)  # 只返回能识别的图片
-                if not cached:
-                    log.debug("表情包 %s 无法下载或缓存不可读，跳过", md5[:8])
-                    return "[表情包]"
-                path = cached
+                if cached:
+                    path = cached
+            if path is None and urls:
+                # 交给后台慢慢下并缓存；同一张表情下次出现即可识别
+                with _STICKER_DL_LOCK:
+                    inflight = md5 in _STICKER_DL_INFLIGHT
+                    if not inflight:
+                        _STICKER_DL_INFLIGHT.add(md5)
+                if not inflight:
+                    _DOWNLOAD_POOL.submit(_sticker_bg_download, md5, urls, str(self.media_dir))
+                log.debug("表情包 %s 转后台下载，本次先用占位符", md5[:8])
+                return "[表情包]"
+            if path is None:
+                return "[表情包]"
 
         if self.sticker_store is not None and room_name:
             try:

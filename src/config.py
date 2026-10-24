@@ -113,6 +113,8 @@ class StickerConfig:
 
     enabled: bool = True
     dir: str = "data/stickers"
+    keyword_dir: str = ""                # 关键词表情池目录（文件名即触发词）；配置后按语义触发、取代随机
+    repeat_cooldown_minutes: float = 30.0  # 同一张表情的最短重发间隔（0 = 可连续发）
     max_send_per_day: int = 5
     reply_chance: float = 0.06             # 正常回复后随机补一张表情包的概率
 
@@ -145,6 +147,7 @@ class ChatConfig:
     max_replies_per_minute: int = 12      # 限流，防止刷屏/烧钱
     max_message_chars: int = 800          # 单条消息上限，超长自动分条
     max_reply_chunks: int = 3             # 一次回复最多拆成几条
+    split_on_comma: bool = False          # 把逗号/顿号也当切分点，每个片段单独发一条
     error_reply: bool = False             # API 出错时是否在群里吱一声
     time_aware: bool = False              # 把人设上下文里注入当前时间（更会接早/晚安）
     max_debounce_seconds: float = 10.0

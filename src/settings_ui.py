@@ -85,6 +85,8 @@ GROUPS = [
         field("proactive.poke_chance", "拍一拍的概率", "probability", minimum=0, maximum=1, step=0.01),
         field("proactive.extra_prompt", "主动聊天的额外要求", "textarea"),
         field("stickers.enabled", "收集会话表情", "bool"),
+        field("stickers.keyword_dir", "关键词表情池目录", "text", description="文件名即触发词（逗号分隔多个）；配置后命中才发、取代随机。"),
+        field("stickers.repeat_cooldown_minutes", "同一表情重发冷却（分钟）", description="冷却内不再重发同一张表情；0 为不限制。", minimum=0, maximum=1440),
         field("stickers.max_send_per_day", "每天最多主发表情数", description="0 表示不限。", minimum=0, maximum=100),
     ]),
     dict(id="media", title="搜索与多媒体", description="按需开启。语音、文件解析和图像能力需要相应组件与服务支持。", fields=[

@@ -265,6 +265,15 @@ def test_split_text_limits_chunk_count():
     assert all(len(c) <= 11 for c in chunks)  # 末尾允许 1 个省略号
 
 
+def test_split_text_comma_mode_one_fragment_per_chunk():
+    text = "谁是大肥鱼，你才是大肥鱼。我先去吃饭啦，这个你自己测一下~"
+    chunks = split_text(text, max_chars=120, max_chunks=12, split_commas=True)
+    assert chunks == ["谁是大肥鱼", "你才是大肥鱼。", "我先去吃饭啦", "这个你自己测一下~"]
+    # 短回复在逗号模式下也要拆，不再走"整句直接返回"的快速路径；条尾逗号去掉
+    assert split_text("好，", 100, 3, split_commas=True) == ["好"]
+    assert split_text("嗯，好，行吧。", 100, 3, split_commas=True) == ["嗯", "好", "行吧。"]
+
+
 # ======================================================================
 # ContextStore：落盘 / 重载 / 重置
 # ======================================================================
@@ -316,3 +325,23 @@ def test_reset_room_clears_context(tmp_path):
     engine.reset_room(ROOM_ID)
     assert store.get(ROOM_ID).turns == []
     assert ContextStore(persist_dir).get(ROOM_ID).turns == []
+
+
+def test_sanitize_reply_drops_placeholder_only():
+    assert sanitize_reply("[表情包]", "大肥鱼") == ""
+    assert sanitize_reply("「[表情包]」", "大肥鱼") == ""
+    assert sanitize_reply("[表情包] 你好呀", "大肥鱼") == "[表情包] 你好呀"
+
+
+def test_build_messages_skips_placeholder_assistant_turns(tmp_path):
+    from src.context import ContextStore
+
+    store = ContextStore(tmp_path / "rooms")
+    ctx = store.get("r1", "测试群")
+    ctx.add_user("小明", "发个表情", 1.0)
+    ctx.add_assistant("[表情包]")
+    ctx.add_user("小明", "再来一个", 2.0)
+    ctx.add_assistant("好嘞")
+    msgs = ctx.build_messages("系统", 10, 10000)
+    contents = [m["content"] for m in msgs if m["role"] == "assistant"]
+    assert contents == ["好嘞"]

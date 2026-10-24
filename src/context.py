@@ -75,6 +75,9 @@ class RoomContext:
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         for t in recent:
+            # 历史里残留的"[表情包]"占位回复会让模型跟着只回这三个字，直接跳过
+            if t.role == "assistant" and t.content.strip() == "[表情包]":
+                continue
             if t.role == "assistant":
                 messages.append({"role": "assistant", "content": t.content})
             else:

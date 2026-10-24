@@ -85,6 +85,9 @@ wechat:
 | `chat.debounce_seconds` | 连续发言合并的安静窗口，默认 2.5 秒 |
 | `chat.max_debounce_seconds` | 持续发言时最多等 10 秒 |
 | `chat.max_replies_per_minute` | 每个会话每分钟发送上限，分条回复也计数 |
+| `chat.split_on_comma` | 开启后把逗号/顿号也当切分点，每个片段单独发一条（拟人碎句） |
+| `stickers.keyword_dir` | 关键词表情池目录：文件名即触发词（逗号分隔多个），配置后命中才发、取代随机 |
+| `stickers.repeat_cooldown_minutes` | 同一张表情的最短重发间隔（默认 30 分钟，0 = 不限制） |
 | `chat.message_ttl_seconds` | 过期消息不再生成或发送回复，默认 300 秒 |
 | `context.window_messages` / `max_context_chars` | 历史条数与字符预算；最新超长消息同样裁剪 |
 | `proactive` | 安静时主动发言；启用后遵守会话冷却与每日上限 |

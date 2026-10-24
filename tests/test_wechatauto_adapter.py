@@ -314,3 +314,92 @@ def test_unknown_group_raises(monkeypatch):
         assert "找不到" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("应该抛出找不到群的异常")
+
+
+def test_sticker_url_candidates_prefers_fallback_host():
+    from src.wechatauto_adapter import _sticker_url_candidates
+
+    url = "http://vweixinf.tc.qq.com/110/20401/stodownload?m=abc&filekey=xyz"
+    assert _sticker_url_candidates(url) == [
+        "http://wxapp.tc.qq.com/110/20401/stodownload?m=abc&filekey=xyz",
+        url,
+    ]
+    other = "https://example.com/a.gif"
+    assert _sticker_url_candidates(other) == [other]
+
+
+def test_retype_image_fixes_extension_by_header(tmp_path):
+    from src.wechatauto_adapter import _retype_image
+
+    png = tmp_path / "emoji_x.gif"
+    png.write_bytes(b"\x89PNG" + b"0" * 8)
+    _retype_image(png)
+    assert (tmp_path / "emoji_x.png").exists()
+
+    gif = tmp_path / "emoji_y.png"
+    gif.write_bytes(b"GIF89a" + b"0" * 8)
+    _retype_image(gif)
+    assert (tmp_path / "emoji_y.gif").exists()
+
+
+def test_sticker_bg_download_success_and_inflight_clear(tmp_path, monkeypatch):
+    import src.wechatauto_adapter as mod
+
+    calls = []
+    monkeypatch.setattr(mod, "_download_file", lambda url, dest, timeout=10.0: calls.append(url) or True)
+    mod._STICKER_DL_INFLIGHT.add("a" * 32)
+    mod._sticker_bg_download("a" * 32, ["http://vweixinf.tc.qq.com/x"], str(tmp_path))
+    assert calls and calls[0].startswith("http://wxapp.tc.qq.com/x")
+    assert "a" * 32 not in mod._STICKER_DL_INFLIGHT
+
+
+def test_gui_focus_reused_while_keyboard_focus_holds(monkeypatch):
+    """输入框仍持焦点时跳过物理点击；焦点丢失或探测失败则回真实点击。"""
+    from types import SimpleNamespace
+
+    from src.wechatauto_adapter import WechatautoAdapter
+
+    clicks = []
+
+    class FakeEdit:
+        def __init__(self, focused):
+            self.HasKeyboardFocus = focused
+
+    def make_gui(focused, broken_uia=False):
+        def real_focus(box=None):
+            clicks.append(box)
+            return True
+
+        def get_input_box():
+            return (0, 0, 100, 50)
+
+        def get_uia():
+            if broken_uia:
+                raise RuntimeError("uia down")
+            return SimpleNamespace(_chat_input=lambda: FakeEdit(focused))
+
+        gui = SimpleNamespace(
+            focus_input=real_focus,
+            get_input_box=get_input_box,
+            _get_uia=get_uia,
+            _current_chat="某个群",
+        )
+        return gui
+
+    adapter = WechatautoAdapter(group_names=["某个群"])
+
+    adapter._wx = SimpleNamespace(_gui=make_gui(focused=True))
+    adapter._patch_gui_focus()
+    assert adapter._wx._gui.focus_input(None) is True   # 有焦点：不点击
+    assert adapter._wx._gui.focus_input((1, 2, 3, 4)) is True
+    assert clicks == []
+
+    adapter._wx = SimpleNamespace(_gui=make_gui(focused=False))
+    adapter._patch_gui_focus()
+    assert adapter._wx._gui.focus_input(None) is True   # 无焦点：真实点击
+    assert clicks == [None]
+
+    adapter._wx = SimpleNamespace(_gui=make_gui(focused=True, broken_uia=True))
+    adapter._patch_gui_focus()
+    assert adapter._wx._gui.focus_input(None) is True   # 探测失败：安全回退点击
+    assert clicks == [None, None]
