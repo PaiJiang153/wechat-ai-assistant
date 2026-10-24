@@ -60,6 +60,7 @@ chat:
   max_replies_per_minute: 12    # 每群每分钟最多回几条（防刷屏/烧钱）
   max_message_chars: 800        # 单条消息字数上限
   max_reply_chunks: 3           # 一次回复最多拆几条
+  split_on_comma: false         # 把逗号/顿号也当切分点，每个片段单独发一条（拟人碎句）
   error_reply: false
   time_aware: true              # 注入当前时间（会说早晚安）
   max_debounce_seconds: 10
@@ -82,7 +83,7 @@ humanize:                       # 拟人化：节奏/条数/随机性
   double_text_chance: 0.0       # 发完补一句：静态补句太生硬，默认关闭
   double_text_delay_min: 2.5
   double_text_delay_max: 6.0
-  silence_chance: 0.0           # 偶尔不回（0=每条都回）
+  silence_chance: 0.0           # 偶尔不回的基准概率（动态：被@/被叫名/有提问必回；活跃对话减半；极短闲聊放大）
   at_chance: 0.7
   debounce_jitter: 1.0
 
@@ -205,8 +206,10 @@ memory:                         # 长期记忆（人物档案）
 stickers:                       # 表情库（复用对方常发表情）
   enabled: false
   dir: "data/stickers"
+  keyword_dir: ""               # 关键词表情池目录（文件名即触发词，逗号分隔多个）；配置后命中才发、取代随机
+  repeat_cooldown_minutes: 30   # 同一张表情的最短重发间隔（0 = 可连续发）
   max_send_per_day: 5
-  reply_chance: 0.06            # 正常回复后随机补一张表情包的概率（0=不发）
+  reply_chance: 0.06            # 未配置关键词池时，回复后随机补一张的概率（0=不发）
 
 proactive:                      # 主动开场
   enabled: false

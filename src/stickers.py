@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import random
+import re
 import threading
 import time
 from pathlib import Path
@@ -115,3 +116,46 @@ class StickerStore:
 
     def count(self, chat: str) -> int:
         return len(self.load(chat).get("items") or [])
+
+
+class KeywordPool:
+    """关键词表情池：文件名即触发词，命中才发（语义触发，取代随机）。
+
+    文件名主干按 `,，、/／+&；;` 和空白拆成多个触发词，如 ``笑死,哈哈.jpg``、
+    ``晚安.gif``；英文不区分大小写。按文件名排序决定优先级：多个词同时命中时
+    排在前的文件先发。目录里没有可用图片时视为未启用（上层退回随机模式）。
+    """
+
+    _SEP_RE = re.compile(r"[,，、/／&；;\s]+")
+
+    def __init__(self, root: str | Path) -> None:
+        self.dir = Path(root)
+
+    def _entries(self) -> list[tuple[list[str], Path]]:
+        out: list[tuple[list[str], Path]] = []
+        try:
+            files = sorted(self.dir.glob("*"))
+        except OSError:
+            return out
+        for f in files:
+            if not f.is_file() or not _is_image(f):
+                continue
+            words = [w for w in (x.strip().casefold() for x in self._SEP_RE.split(f.stem)) if w]
+            if words:
+                out.append((words, f))
+        return out
+
+    def count(self) -> int:
+        return len(self._entries())
+
+    def match(self, text: str, exclude: set[str] | None = None) -> str | None:
+        """按文本找触发的表情；``exclude`` 里的路径（冷却中）跳过。"""
+        hay = (text or "").casefold()
+        if not hay:
+            return None
+        for words, f in self._entries():
+            if str(f) in (exclude or set()):
+                continue
+            if any(w in hay for w in words):
+                return str(f)
+        return None

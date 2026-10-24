@@ -178,7 +178,7 @@ class ReplyEngine:
         )
 
         text = sanitize_reply(text, persona.bot_name)
-        chunks = split_text(text, self.cfg.chat.max_message_chars, self.cfg.chat.max_reply_chunks)
+        chunks = split_text(text, self.cfg.chat.max_message_chars, self.cfg.chat.max_reply_chunks, self.cfg.chat.split_on_comma)
 
         if commit and chunks:
             self.commit_reply(room_id, "\n".join(chunks))
@@ -353,46 +353,66 @@ def sanitize_reply(text: str, bot_name: str = "") -> str:
     text = re.sub(r"，{2,}", "，", text)
     text = re.sub(r"[，,、]+(?=\n|$)", "", text)
     text = re.sub(r"[，,、]+\s*$", "", text)
-    return text.strip()
+    text = text.strip()
+    # 模型会模仿输入里的占位符、只回一个"[表情包]"（真的表情另有发送通道），
+    # 这种"空回复"直接归零，上层按无文本处理
+    if text.replace(" ", "").replace("「", "").replace("」", "") == "[表情包]":
+        return ""
+    return text
 
 
 _SENT_SPLIT_RE = re.compile(r"(?<=[。！？!?；;\n])")
+_SENT_SPLIT_COMMA_RE = re.compile(r"(?<=[。！？!?；;\n，,、])")
 
 
-def split_text(text: str, max_chars: int = 800, max_chunks: int = 3) -> list[str]:
-    """把长回复切成多条微信消息：优先按段落，其次按句子，最后硬切。"""
+def split_text(text: str, max_chars: int = 800, max_chunks: int = 3, split_commas: bool = False) -> list[str]:
+    """把长回复切成多条微信消息：优先按段落，其次按句子，最后硬切。
+
+    ``split_commas`` 时把逗号/顿号也当切分点，片段不再合并进桶，
+    每个片段单独成一条消息（"每个逗号一发"的节奏）。
+    """
     text = (text or "").strip()
     if not text:
         return []
-    if len(text) <= max_chars:
+    if not split_commas and len(text) <= max_chars:
         return [text]
 
     chunks: list[str] = []
     current = ""
     # 先按句子切成小片段，再贪心装进 max_chars 的桶里
+    split_re = _SENT_SPLIT_COMMA_RE if split_commas else _SENT_SPLIT_RE
     pieces: list[str] = []
     for para in text.split("\n"):
         if not para.strip():
             continue
-        for sent in _SENT_SPLIT_RE.split(para):
+        for sent in split_re.split(para):
             if sent:
                 pieces.append(sent)
-    for piece in pieces:
-        while len(piece) > max_chars:  # 单句超长，硬切
-            if current:
+    if split_commas:
+        for piece in pieces:  # 每个片段单独成条；条尾逗号去掉；超长片段仍硬切
+            while len(piece) > max_chars:
+                chunks.append(re.sub(r"[，,、]+\s*$", "", piece[:max_chars]).strip())
+                piece = piece[max_chars:]
+            piece = re.sub(r"[，,、]+\s*$", "", piece).strip()
+            if piece:
+                chunks.append(piece)
+    else:
+        for piece in pieces:
+            while len(piece) > max_chars:  # 单句超长，硬切
+                if current:
+                    chunks.append(current.strip())
+                    current = ""
+                chunks.append(piece[:max_chars].strip())
+                piece = piece[max_chars:]
+            if not current:
+                current = piece
+            elif len(current) + len(piece) <= max_chars:
+                current += piece
+            else:
                 chunks.append(current.strip())
-                current = ""
-            chunks.append(piece[:max_chars].strip())
-            piece = piece[max_chars:]
-        if not current:
-            current = piece
-        elif len(current) + len(piece) <= max_chars:
-            current += piece
-        else:
+                current = piece
+        if current.strip():
             chunks.append(current.strip())
-            current = piece
-    if current.strip():
-        chunks.append(current.strip())
 
     chunks = [c for c in chunks if c]
     if len(chunks) > max_chunks:
